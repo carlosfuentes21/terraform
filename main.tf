@@ -58,6 +58,61 @@ resource "aws_sqs_queue" "my_sqs" {
   }
 }
 
+resource "aws_sqs_queue" "sqs_alerts" {
+  name                       = "alerts"
+  delay_seconds              = 0
+  visibility_timeout_seconds = 30
+
+  tags = {
+    environment = "dev"
+    Name        = "alerts"
+  }
+}
+
+resource "aws_ssm_parameter" "entrypoint_sqs_wait_time" {
+  name  = "/config/vdc-back-limits-p2p/entrypoint.sqs.waitTimeSeconds"
+  type  = "String"
+  value = 20
+
+  tags = {
+    Environment = "dev"
+    Application = "mi-aplicacion"
+  }
+}
+
+resource "aws_ssm_parameter" "entrypoint_sqs_max_number_of_messages" {
+  name  = "/config/vdc-back-limits-p2p/entrypoint.sqs.maxNumberOfMessages"
+  type  = "String"
+  value = 10
+
+  tags = {
+    Environment = "dev"
+    Application = "mi-aplicacion"
+  }
+}
+
+resource "aws_ssm_parameter" "entrypoint_sqs_visibility_timeout_seconds" {
+  name  = "/config/vdc-back-limits-p2p/entrypoint.sqs.visibilityTimeoutSeconds"
+  type  = "String"
+  value = 10
+
+  tags = {
+    Environment = "dev"
+    Application = "mi-aplicacion"
+  }
+}
+
+resource "aws_ssm_parameter" "entrypoint_sqs_number_of_threads" {
+  name  = "/config/vdc-back-limits-p2p/entrypoint.sqs.numberOfThreads"
+  type  = "String"
+  value = 1
+
+  tags = {
+    Environment = "dev"
+    Application = "mi-aplicacion"
+  }
+}
+
 resource "aws_ssm_parameter" "entrypoint_sqs_queue_url" {
   name  = "/config/vdc-back-limits-p2p/entrypoint.sqs.queueUrl"
   type  = "String"
@@ -69,6 +124,18 @@ resource "aws_ssm_parameter" "entrypoint_sqs_queue_url" {
   }
 }
 
+resource "aws_ssm_parameter" "adapter_sqs_queue_url" {
+  name  = "/config/vdc-back-limits-p2p/adapter.sqs.alerts"
+  type  = "String"
+  value = "https://sqs.us-east-1.amazonaws.com/058264091195/alerts"
+
+  tags = {
+    Environment = "dev"
+    Application = "mi-aplicacion"
+  }
+}
+
+//
 resource "aws_ssm_parameter" "region_aws" {
   name  = "/config/application/cloud.aws.region.static"
   type  = "String"
@@ -79,6 +146,47 @@ resource "aws_ssm_parameter" "region_aws" {
     Application = "mi-aplicacion"
   }
 }
+
+
+
+resource "aws_iam_role" "lambda_role" {
+  name = "lambda-execution-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Action = "sts:AssumeRole",
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        },
+        Effect = "Allow",
+        Sid    = ""
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_basic" {
+  role       = aws_iam_role.lambda_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_lambda_function" "my_lambda" {
+  function_name = "my-first-lambda"
+  role          = aws_iam_role.lambda_role.arn
+  handler       = "app.lambdaHandler"
+  runtime       = "nodejs18.x"
+  filename      = "C:/Users/carlos.fuentes_pragm/Desktop/assetment/proyectos/terraform/HUB_EC_P2P_GETBANK_MS.zip"
+  source_code_hash = filebase64sha256("C:/Users/carlos.fuentes_pragm/Desktop/assetment/proyectos/terraform/HUB_EC_P2P_GETBANK_MS.zip")
+
+  environment {
+    variables = {
+      ENV = "dev"
+    }
+  }
+}
+
 
 
 resource "aws_ecr_repository" "ecr_redeban_ct" {
@@ -221,78 +329,11 @@ resource "aws_iam_role" "ecs_task_execution_role" {
   })
 }
 
-/*
-resource "aws_iam_role_policy" "ecs_policy" {
-  name = "ecsPolicy"
-  role = aws_iam_role.ecs_task_execution_role.id
-
-  policy = jsonencode({
-    Version = "2012-10-17",
-    Statement = [
-      {
-        Effect = "Allow",
-        Action = [
-          "logs:CreateLogStream",
-          "logs:PutLogEvents",
-          "logs:CreateLogGroup"
-        ],
-        Resource = "*"
-      },
-      {
-        Effect = "Allow",
-        Action = [
-          "sqs:ReceiveMessage",
-          "sqs:DeleteMessage",
-          "sqs:GetQueueAttributes"
-        ],
-        Resource = "*"
-      },
-      {
-        Effect = "Allow",
-        Action = [
-          "dynamodb:GetItem",
-          "dynamodb:PutItem",
-          "dynamodb:UpdateItem",
-          "dynamodb:DeleteItem",
-          "dynamodb:Scan",
-          "dynamodb:Query"
-        ],
-        Resource = "*"
-      },
-      {
-        Effect = "Allow",
-        Action = [
-          "ssm:GetParametersByPath",
-          "ssm:GetParameters",
-          "ssm:GetParameter"
-        ],
-        Resource = "*"
-      },
-      {
-        Effect = "Allow",
-        Action = [
-          "ecr:GetDownloadUrlForLayer",
-          "ecr:BatchGetImage",
-          "ecr:BatchCheckLayerAvailability",
-          "ecr:GetAuthorizationToken"
-        ],
-        Resource = "*"
-      }
-    ]
-  })
-}
-*/
-
 
 resource "aws_iam_role_policy_attachment" "ecs_task_execution_role_policy" {
   role       = aws_iam_role.ecs_task_execution_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
-
-/*resource "aws_iam_role_policy_attachment" "ecs_task_role_attachment" {
-  role       = aws_iam_role.ecs_task_role.name
-  policy_arn = aws_iam_policy.ecs_policy.arn
-}*/
 
 
 resource "aws_iam_role" "ecs_task_role" {
